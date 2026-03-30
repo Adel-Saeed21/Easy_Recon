@@ -190,7 +190,6 @@ MIT — use it, break it, improve it.
 
 <div align="center">
 
-Made with ❤️ and Go
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&pause=2000&color=00FF41&center=true&vCenter=true&width=400&lines=Happy+Hunting+%F0%9F%8E%AF;Stay+in+scope.+Always." alt="footer" />
 
