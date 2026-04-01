@@ -29,9 +29,9 @@ func main() {
 }
 
 func printBanner() {
-	cyan   := "\033[36m"
+	cyan := "\033[36m"
 	orange := "\033[33m"
-	reset  := "\033[0m"
+	reset := "\033[0m"
 
 	fmt.Println()
 	fmt.Printf("%s  ███████╗ █████╗ ███████╗██╗   ██╗%s\n", cyan, reset)
@@ -63,22 +63,34 @@ func renderBar(current, total int, toolName string) {
 		percent = (current * 100) / total
 	}
 
-	green  := "\033[32m"
-	gray   := "\033[90m"
-	cyan   := "\033[36m"
-	reset  := "\033[0m"
+	green := "\033[32m"
+	gray := "\033[90m"
+	cyan := "\033[36m"
+	reset := "\033[0m"
 
 	bar := green + strings.Repeat("█", filled) + gray + strings.Repeat("░", barWidth-filled) + reset
 
 	fmt.Printf("\r  %s  %s[%s]%s %3d%%  ",
-		cyan + toolName + reset,
+		cyan+toolName+reset,
 		"\033[90m", bar, "\033[90m]",
 		percent,
 	)
 	fmt.Printf("%-10s", "")
 }
 
+func askUser(question string) bool {
+	fmt.Println(question)
+	fmt.Print("  Your choice [y/n]: ")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	return answer == "y" || answer == "yes"
+}
+
 func run(domain string) error {
+	green := "\033[32m"
+	reset := "\033[0m"
+
 	domain = cleanDomain(domain)
 	fmt.Printf("  [*] Target : %s\n\n", domain)
 
@@ -89,6 +101,7 @@ func run(domain string) error {
 		return err
 	}
 
+	// ── Subdomain Enumeration ─────────────────────────────────────────────────
 	type toolEntry struct {
 		name    string
 		run     func([]string) ([]string, error)
@@ -113,10 +126,8 @@ func run(domain string) error {
 		return fmt.Errorf("no enumeration tools found")
 	}
 
-	total    := len(tools)
+	total := len(tools)
 	var allSubs []string
-	green  := "\033[32m"
-	reset  := "\033[0m"
 
 	for i, t := range tools {
 		renderBar(i*100/total, 100, t.name)
@@ -132,7 +143,6 @@ func run(domain string) error {
 		allSubs = append(allSubs, subs...)
 	}
 
-	// bar 100%
 	renderBar(100, 100, "Done        ")
 	fmt.Println()
 	fmt.Println()
@@ -147,7 +157,7 @@ func run(domain string) error {
 		return fmt.Errorf("failed to save subdomains: %w", err)
 	}
 
-	// ── httpx ─────────────────────────────────────────────────────────────────
+	// ── Httpx ─────────────────────────────────────────────────────────────────
 	fmt.Printf("  [*] Running httpx...\n")
 	alive, err := runner.Httpx{}.Run(allSubs)
 	if err != nil {
@@ -160,33 +170,77 @@ func run(domain string) error {
 		return fmt.Errorf("failed to save alive domains: %w", err)
 	}
 
-	fmt.Println("  ┌────────────────────────────────────────────────┐")
-	fmt.Println("  │  Keep per-tool files?                          │")
-	fmt.Println("  │  subfinder.txt / assetfinder.txt / ...         │")
-	fmt.Println("  │                                                │")
-	fmt.Println("  │  [y] Yes, keep them                            │")
-	fmt.Println("  │  [n] No, delete  (alive.txt stays safe)        │")
-	fmt.Println("  └────────────────────────────────────────────────┘")
-	fmt.Print("  Your choice [y/n]: ")
+	// ── URL Collection ────────────────────────────────────────────────────────
+	var allURLs []string
+	urlToolsAvailable := utils.IsToolInstalled("waybackurls") || utils.IsToolInstalled("waymore")
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	if urlToolsAvailable {
+		collectURLs := askUser("  ┌────────────────────────────────────────────────┐\n  │  Collect URLs from Wayback Machine?            │\n  │  (waybackurls / waymore)                       │\n  │                                                │\n  │  [y] Yes, collect URLs                         │\n  │  [n] No, skip                                  │\n  └────────────────────────────────────────────────┘")
 
-	if answer == "n" || answer == "no" {
+		if collectURLs {
+			type urlTool struct {
+				name    string
+				run     func([]string) ([]string, error)
+				outFile string
+			}
+
+			var urlTools []urlTool
+			if utils.IsToolInstalled("waybackurls") {
+				urlTools = append(urlTools, urlTool{"WaybackURLs ", runner.WaybackURL{}.Run, domain + "/waybackurls.txt"})
+			}
+			if utils.IsToolInstalled("waymore") {
+				urlTools = append(urlTools, urlTool{"Waymore     ", runner.Waymore{}.Run, domain + "/waymore.txt"})
+			}
+
+			totalURL := len(urlTools)
+			for i, t := range urlTools {
+				renderBar(i*100/totalURL, 100, t.name)
+
+				for _, aliveDomain := range alive {
+					urls, err := t.run([]string{aliveDomain})
+					if err != nil {
+						fmt.Printf("\n  [!] %s failed for %s: %v\n", t.name, aliveDomain, err)
+						continue
+					}
+					allURLs = append(allURLs, urls...)
+				}
+
+				_ = utils.SaveToFile(t.outFile, utils.RemoveDuplicates(allURLs))
+			}
+
+			renderBar(100, 100, "Done        ")
+			fmt.Println()
+			fmt.Println()
+
+			allURLs = utils.RemoveDuplicates(allURLs)
+			fmt.Printf("  %s[+]%s Total unique URLs collected : %d\n\n", green, reset, len(allURLs))
+
+			if err := utils.SaveToFile(domain+"/urls.txt", allURLs); err != nil {
+				return fmt.Errorf("failed to save URLs: %w", err)
+			}
+		}
+	} else {
+		fmt.Printf("  [!] No URL collection tools found (waybackurls / waymore), skipping...\n\n")
+	}
+
+	cleanup := askUser("  ┌────────────────────────────────────────────────┐\n  │  Cleanup intermediate files?                   │\n  │  (alive.txt & urls.txt will stay safe)         │\n  │                                                │\n  │  [y] Yes, delete them                          │\n  │  [n] No, keep them                             │\n  └────────────────────────────────────────────────┘")
+
+	if cleanup {
 		toDelete := []string{
 			domain + "/subfinder.txt",
 			domain + "/assetfinder.txt",
 			domain + "/findomain.txt",
 			domain + "/amass.txt",
 			domain + "/subdomains.txt",
+			domain + "/waybackurls.txt",
+			domain + "/waymore.txt",
 		}
 		for _, f := range toDelete {
 			if err := os.Remove(f); err == nil {
 				fmt.Printf("  %s[✓]%s Deleted: %s\n", green, reset, f)
 			}
 		}
-		fmt.Printf("  %s[✓]%s Cleanup done — alive.txt is safe.\n", green, reset)
+		fmt.Printf("  %s[✓]%s Cleanup done — alive.txt & urls.txt are safe.\n", green, reset)
 	} else {
 		fmt.Printf("  %s[✓]%s Files kept.\n", green, reset)
 	}
