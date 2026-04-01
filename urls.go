@@ -25,19 +25,23 @@ func buildURLTools(domain string) []urlTool {
 	return tools
 }
 
-func runURLCollection(alive []string, tools []urlTool) []string {
+func runURLCollection(alive []string, tools []urlTool, threads int) []string {
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
 		allURLs []string
 	)
 
-	fmt.Printf("  [*] Running %d URL tools × %d domains concurrently...\n\n", len(tools), len(alive))
+	sem := make(chan struct{}, threads)
+
+	fmt.Printf("  [*] Running %d URL tools × %d domains | threads: %d\n\n", len(tools), len(alive), threads)
 
 	for _, t := range tools {
 		wg.Add(1)
+		sem <- struct{}{}
 		go func(t urlTool) {
 			defer wg.Done()
+			defer func() { <-sem }()
 
 			var toolURLs []string
 			var domainWg sync.WaitGroup
@@ -47,13 +51,11 @@ func runURLCollection(alive []string, tools []urlTool) []string {
 				domainWg.Add(1)
 				go func(d string) {
 					defer domainWg.Done()
-
 					urls, err := t.run([]string{d})
 					if err != nil {
 						fmt.Printf("  [!] %s failed for %s: %v\n", t.name, d, err)
 						return
 					}
-
 					domainMu.Lock()
 					toolURLs = append(toolURLs, urls...)
 					domainMu.Unlock()
@@ -61,7 +63,6 @@ func runURLCollection(alive []string, tools []urlTool) []string {
 			}
 
 			domainWg.Wait()
-
 			toolURLs = utils.RemoveDuplicates(toolURLs)
 			_ = utils.SaveToFile(t.outFile, toolURLs)
 

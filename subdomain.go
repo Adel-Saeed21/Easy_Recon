@@ -44,16 +44,13 @@ func runSubdomainEnum(domain string, tools []toolEntry) []string {
 		wg.Add(1)
 		go func(t toolEntry) {
 			defer wg.Done()
-
 			subs, err := t.run([]string{domain})
 			if err != nil {
 				fmt.Printf("  [!] %s failed: %v\n", t.name, err)
 				return
 			}
-
 			subs = utils.RemoveDuplicates(subs)
 			_ = utils.SaveToFile(t.outFile, subs)
-
 			mu.Lock()
 			allSubs = append(allSubs, subs...)
 			fmt.Printf("  [✓] %-14s found: %d\n", t.name, len(subs))

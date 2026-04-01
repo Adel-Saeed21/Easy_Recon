@@ -12,17 +12,22 @@ import (
 )
 
 func main() {
-	domain := flag.String("d", "", "Target domain")
+	domain  := flag.String("d", "", "Target domain")
+	threads := flag.Int("t", 10, "Number of threads")
 	flag.Parse()
 
 	printBanner()
 
 	if *domain == "" {
-		fmt.Println("Usage: easyRecon -d domain.com")
+		fmt.Println("Usage: easyRecon -d domain.com [options]")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -d  string   Target domain")
+		fmt.Println("  -t  int      Number of threads (default 10)")
 		os.Exit(1)
 	}
 
-	if err := run(*domain); err != nil {
+	if err := run(*domain, *threads); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[!] Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -61,12 +66,13 @@ func askUser(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-func run(domain string) error {
+func run(domain string, threads int) error {
 	green := "\033[32m"
 	reset := "\033[0m"
 
 	domain = cleanDomain(domain)
-	fmt.Printf("  [*] Target : %s\n\n", domain)
+	fmt.Printf("  [*] Target  : %s\n", domain)
+	fmt.Printf("  [*] Threads : %d\n\n", threads)
 
 	if err := os.MkdirAll(domain, 0755); err != nil {
 		return fmt.Errorf("failed to create output folder: %w", err)
@@ -109,6 +115,7 @@ func run(domain string) error {
 	}
 
 	// ── URL Collection ────────────────────────────────────────────────────────
+	var allURLs []string
 	urlTools := buildURLTools(domain)
 
 	if len(urlTools) == 0 {
@@ -124,7 +131,7 @@ func run(domain string) error {
 			"  └────────────────────────────────────────────────┘")
 
 		if collect {
-			allURLs := runURLCollection(alive, urlTools)
+			allURLs = runURLCollection(alive, urlTools, threads)
 			fmt.Println()
 
 			allURLs = utils.RemoveDuplicates(allURLs)
@@ -136,11 +143,34 @@ func run(domain string) error {
 		}
 	}
 
+	// ── Parameter Discovery ───────────────────────────────────────────────────
+	if len(allURLs) > 0 {
+		discoverParams := askUser(
+			"  ┌────────────────────────────────────────────────┐\n" +
+			"  │  Run parameter discovery? (arjun)              │\n" +
+			"  │                                                │\n" +
+			"  │  [y] Yes                                       │\n" +
+			"  │  [n] No, skip                                  │\n" +
+			"  └────────────────────────────────────────────────┘")
+
+		if discoverParams {
+			params := runParamDiscovery(allURLs, domain, threads)
+			fmt.Println()
+
+			params = utils.RemoveDuplicates(params)
+			fmt.Printf("  %s[+]%s Total unique parameters found : %d\n\n", green, reset, len(params))
+
+			if err := utils.SaveToFile(domain+"/params.txt", params); err != nil {
+				return fmt.Errorf("failed to save params: %w", err)
+			}
+		}
+	}
+
 	// ── Cleanup ───────────────────────────────────────────────────────────────
 	cleanup := askUser(
 		"  ┌────────────────────────────────────────────────┐\n" +
 		"  │  Cleanup intermediate files?                   │\n" +
-		"  │  (alive.txt & urls.txt will stay safe)         │\n" +
+		"  │  (alive.txt & urls.txt & params.txt stay safe) │\n" +
 		"  │                                                │\n" +
 		"  │  [y] Yes, delete them                          │\n" +
 		"  │  [n] No, keep them                             │\n" +
@@ -161,7 +191,7 @@ func run(domain string) error {
 				fmt.Printf("  %s[✓]%s Deleted: %s\n", green, reset, f)
 			}
 		}
-		fmt.Printf("  %s[✓]%s Cleanup done — alive.txt & urls.txt are safe.\n", green, reset)
+		fmt.Printf("  %s[✓]%s Cleanup done — alive.txt, urls.txt & params.txt are safe.\n", green, reset)
 	} else {
 		fmt.Printf("  %s[✓]%s Files kept.\n", green, reset)
 	}
