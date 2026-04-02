@@ -9,14 +9,14 @@
 ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝       ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝
 ```
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&pause=1000&color=00FF41&center=true&vCenter=true&width=600&lines=Automated+Subdomain+Recon+Tool;Built+with+Go+%F0%9F%90%B9;Fast+%7C+Clean+%7C+Modular;subfinder+%2B+httpx+Pipeline" alt="Typing SVG" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&pause=1000&color=00FF41&center=true&vCenter=true&width=600&lines=Automated+Subdomain+Recon+Tool;Built+with+Go+%F0%9F%90%B9;Concurrent+enumeration+%7C+httpx+%7C+Wayback+%7C+Arjun" alt="Typing SVG" />
 
 <br/>
 
-![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=for-the-badge&logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
-![Tools](https://img.shields.io/badge/Tools-subfinder%20%7C%20httpx-orange?style=for-the-badge)
+![Tools](https://img.shields.io/badge/Tools-subfinder%20%7C%20httpx%20%7C%20waymore-orange?style=for-the-badge)
 
 </div>
 
@@ -24,80 +24,81 @@
 
 ## 🔍 What is easyRecon?
 
-**easyRecon** is a lightweight, modular recon automation tool written in Go.  
-It automates the classic subdomain enumeration pipeline:
-
-```
-Domain Input  ──►  subfinder  ──►  Dedup  ──►  httpx  ──►  Results
-```
-
-One command. Clean output. Everything saved automatically.
+**easyRecon** is a Go recon automation tool. It runs **subdomain enumeration** with every supported tool you have installed (in parallel), **deduplicates** results, pipes hosts through **httpx**, then optionally collects **historical URLs** (Wayback) and runs **parameter discovery** with Arjun. Output is written under a folder named after the target domain.
 
 ---
 
 ## ⚡ Quick Start
 
 ```bash
-easyRecon -d domain.com
+go build -o easyRecon .
+./easyRecon -d example.com
 ```
 
-That's it. Everything else is handled automatically.
+Use `-no-tg` if you only want the terminal (no Telegram bot).
 
 ---
 
 ## 🔄 How It Works
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      easyRecon -d domain.com             │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Create folder: domain/  │
-          └──────────────┬───────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Check: subfinder & httpx│
-          │  installed? ✅            │
-          └──────────────┬───────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Run subfinder -d domain │
-          │  → collect subdomains    │
-          └──────────────┬───────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Remove duplicates       │
-          │  Save → subdomains.txt   │
-          └──────────────┬───────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Pipe to httpx -silent   │
-          │  → filter alive hosts    │
-          └──────────────┬───────────┘
-                         │
-                         ▼
-          ┌──────────────────────────┐
-          │  Save → alive.txt  🚀    │
-          └──────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                   easyRecon -d domain.com [-t N] [-no-tg]        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────────┐
+              │  Create folder: domain/      │
+              └──────────────┬───────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────────┐
+              │  httpx must be in PATH       │
+              │  ≥1 enum tool or exit        │
+              └──────────────┬───────────────┘
+                             │
+                             ▼
+    ┌────────────────────────────────────────────────────────┐
+    │  Subdomain tools (each optional, run concurrently):     │
+    │  subfinder · assetfinder · findomain · amass           │
+    │  → merge → dedup → subdomains.txt                     │
+    └────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────────┐
+              │  httpx on all subdomains      │
+              │  → alive.txt                  │
+              └──────────────┬───────────────┘
+                             │
+              ┌──────────────┴───────────────┐
+              │  Optional (prompts):          │
+              │  waybackurls / waymore → urls │
+              │  arjun → params               │
+              │  cleanup intermediate files   │
+              └──────────────────────────────┘
 ```
 
 ---
 
 ## 📁 Output Structure
 
-After running, you'll find:
+Typical layout after a full run:
 
 ```
 domain.com/
-├── subdomains.txt    # All unique subdomains from subfinder
-└── alive.txt         # Live hosts confirmed by httpx
+├── subdomains.txt      # Unique subdomains (merged from enum tools)
+├── alive.txt           # Live hosts (httpx)
+├── urls.txt            # Optional — Wayback / waymore URLs
+├── params.txt          # Optional — parameters from arjun
+├── subfinder.txt       # Per-tool raw output (if that tool ran)
+├── assetfinder.txt
+├── findomain.txt
+├── amass.txt
+├── waybackurls.txt
+└── waymore.txt
 ```
+
+If you choose **cleanup** at the end, intermediate per-tool files and `subdomains.txt` are removed; **`alive.txt`**, **`urls.txt`**, and **`params.txt`** are kept when present.
 
 ---
 
@@ -105,56 +106,73 @@ domain.com/
 
 ```
 easyRecon/
-├── main.go                  # Entry point & orchestration
+├── main.go                 # CLI, prompts, orchestration
+├── bot.go                  # Telegram bot & .easyrecon_config.json
+├── subdomain.go            # Subdomain tool wiring
+├── urls.go                 # Wayback URL collection
+├── hiddenParamters.go      # Arjun parameter discovery
 ├── runner/
-│   ├── tool.go              # Tool interface definition
-│   ├── subfinder.go         # Subfinder wrapper
-│   └── httpx.go             # Httpx wrapper
+│   ├── tool.go             # Tool interface
+│   ├── subfinder.go
+│   ├── assetfinder.go
+│   ├── findomain.go
+│   ├── amass.go
+│   ├── httpx.go
+│   ├── waybackurl.go
+│   ├── waymore.go
+│   └── arjun.go
 └── utils/
-    ├── dedup.go             # Remove duplicate entries
-    ├── file.go              # Save results to disk
-    └── tools.go             # Check tool availability
+    ├── remove_duplicate.go
+    ├── save_to_file.go
+    └── is_tool_installed.go
 ```
 
 ---
 
 ## 🛠️ Prerequisites
 
-Make sure these tools are installed and in your `$PATH`:
+| Role | Tools | Notes |
+|------|--------|--------|
+| **Required** | [httpx](https://github.com/projectdiscovery/httpx) | Always used for probing. |
+| **Subdomains** (need ≥1) | [subfinder](https://github.com/projectdiscovery/subfinder), [assetfinder](https://github.com/tomnomnom/assetfinder), [findomain](https://github.com/Findomain/Findomain), [amass](https://github.com/owasp-amass/amass) | Installed tools run **in parallel**. |
+| **URLs** (optional) | [waybackurls](https://github.com/tomnomnom/waybackurls), [waymore](https://github.com/xnl-h4ck3r/waymore) | Prompted after httpx. |
+| **Parameters** (optional) | [arjun](https://github.com/s0md3v/Arjun) | Prompted if `urls.txt` was produced. |
 
-| Tool | Install |
-|------|---------|
-| [subfinder](https://github.com/projectdiscovery/subfinder) | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
-| [httpx](https://github.com/projectdiscovery/httpx) | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest` |
+Example installs:
+
+```bash
+go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+```
 
 ---
 
 ## 📦 Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/youruser/easyRecon.git
-cd easyRecon
-
-# Build
+git clone https://github.com/Adel-Saeed21/Easy_Recon.git
+cd Easy_Recon
 go build -o easyRecon .
-
-# Run
 ./easyRecon -d example.com
 ```
 
 ---
 
-## 🖥️ Example Output
+## 🤖 Telegram (optional)
 
+On startup, easyRecon can use a Telegram bot so you can answer **y/n** prompts from your phone and mirror output to chat.
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and get a token.
+2. Place credentials in **`.easyrecon_config.json`** in the project directory:
+
+```json
+{
+  "bot_token": "YOUR_BOT_TOKEN",
+  "chat_id": 123456789
+}
 ```
-[*] Starting recon on: example.com
-[*] Running subfinder...
-[+] Found 42 unique subdomains
-[*] Running httpx...
-[+] Found 18 alive domains
-[✓] Recon completed! Results saved in: example.com/
-```
+
+3. Run as usual. Use **`-no-tg`** to skip Telegram and use stdin only.
 
 ---
 
@@ -163,13 +181,33 @@ go build -o easyRecon .
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-d` | Target domain | required |
+| `-t` | Concurrency for URL collection and Arjun | `10` |
+| `-no-tg` | Disable Telegram; terminal only | off |
+
+---
+
+## 🖥️ Example Output
+
+```
+  [*] Target  : example.com
+  [*] Threads : 10
+
+  [*] Running 2 tools concurrently...
+
+  [✓] Subfinder    found: 120
+  [✓] Assetfinder  found: 45
+
+  [+] Total unique subdomains : 142
+
+  [*] Running httpx...
+  [✓] Alive domains : 38
+```
 
 ---
 
 ## 🤝 Contributing
 
-Pull requests are welcome!  
-If you want to add a new tool (e.g. `nmap`, `nuclei`), just implement the `Tool` interface:
+Pull requests are welcome. To add a new pipeline stage, implement the `Tool` interface in `runner/` and wire it from `main` or the relevant `*.go` file:
 
 ```go
 type Tool interface {
@@ -177,8 +215,6 @@ type Tool interface {
     Run(input []string) ([]string, error)
 }
 ```
-
-Drop your file in `runner/` and plug it into `main.go`. Done.
 
 ---
 
@@ -189,7 +225,6 @@ MIT — use it, break it, improve it.
 ---
 
 <div align="center">
-
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&pause=2000&color=00FF41&center=true&vCenter=true&width=400&lines=Happy+Hunting+%F0%9F%8E%AF;Stay+in+scope.+Always." alt="footer" />
 
